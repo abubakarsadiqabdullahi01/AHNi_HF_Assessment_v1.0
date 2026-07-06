@@ -70,6 +70,21 @@
   .req-legend{color:var(--muted);font-size:12px;margin:0 0 14px;}
   .req-legend .req{margin-left:0;margin-right:3px;}
 
+  /* Bottom submit call-to-action */
+  .submit-panel{display:flex;align-items:center;justify-content:space-between;gap:24px;
+    flex-wrap:wrap;background:var(--paper);border:1px solid var(--line);
+    border-top:3px solid var(--red);border-radius:12px;padding:22px 24px;margin-top:26px;
+    box-shadow:0 4px 18px rgba(0,0,0,.05);}
+  .submit-info{flex:1;min-width:240px;}
+  .submit-info p{margin:0;color:var(--muted);font-size:13px;line-height:1.5;}
+  .submit-prog{display:flex;align-items:baseline;gap:6px;margin-bottom:4px;}
+  .submit-pct{font-size:24px;font-weight:800;color:var(--red);line-height:1;}
+  .submit-lbl{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;}
+  .linkbtn{background:none;border:none;padding:0;color:var(--red);font:inherit;
+    font-weight:700;cursor:pointer;text-decoration:underline;}
+  .submit-panel .btn.primary{flex:none;}
+  @media(max-width:560px){.submit-panel .btn.primary{width:100%;}}
+
   /* ---------- Layout ---------- */
   .wrap{max-width:1180px;margin:0 auto;padding:24px 20px 120px;display:grid;
     grid-template-columns:220px 1fr;gap:28px;align-items:start;}
@@ -254,7 +269,7 @@
   /* ---------- Print ---------- */
   @media print{
     body{background:#fff;font-size:11px;}
-    .topbar,.nav,.actions,#toast,.footnote{display:none !important;}
+    .topbar,.nav,.actions,#toast,.footnote,.submit-panel,.req-legend{display:none !important;}
     .printhead{display:flex !important;align-items:center;gap:12px;
       border-bottom:2px solid var(--red);padding-bottom:8px;margin-bottom:14px;}
     .printhead img{height:34px;width:auto;}

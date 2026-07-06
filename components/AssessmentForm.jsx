@@ -524,6 +524,19 @@ export default function AssessmentForm() {
             {SECTIONS.map((s) => <Section key={s.id} sec={s} store={store.current} commit={commit} />)}
           </div>
 
+          <div className="submit-panel">
+            <div className="submit-info">
+              <div className="submit-prog">
+                <span className="submit-pct">{progress}%</span>
+                <span className="submit-lbl">complete</span>
+              </div>
+              <p>Review your responses, then submit to the AHNi database. You can still <button type="button" className="linkbtn" onClick={saveDraft}>save a draft</button> or <button type="button" className="linkbtn" onClick={() => window.print()}>export a PDF</button> first.</p>
+            </div>
+            <button className="btn primary big" onClick={submit} disabled={submitting}>
+              {submitting ? "Submitting…" : "Submit assessment"}
+            </button>
+          </div>
+
           <p className="footnote">AHNi · Prevention, Care &amp; Treatment — drafts autosave in this browser. Submit sends your responses to the AHNi database.</p>
         </main>
       </div>
