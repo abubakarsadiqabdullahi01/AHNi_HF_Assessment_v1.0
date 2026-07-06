@@ -17,7 +17,9 @@ CREATE TABLE IF NOT EXISTS hf_submission (
     state            TEXT GENERATED ALWAYS AS (meta->>'state')    STORED,
     assessor         TEXT GENERATED ALWAYS AS (meta->>'assessor') STORED,
     reporting_period TEXT GENERATED ALWAYS AS (meta->>'period')   STORED,
-    assessment_date  DATE GENERATED ALWAYS AS ((meta->>'date')::date) STORED,
+    -- raw date string; parsed to a real DATE in the hf_answer_long view.
+    -- (A generated DATE column is rejected: text->date casts are not IMMUTABLE.)
+    assessment_date_text TEXT GENERATED ALWAYS AS (meta->>'date') STORED,
 
     completion_pct   NUMERIC(5,2),
     submitted_by     TEXT,
@@ -28,7 +30,7 @@ CREATE TABLE IF NOT EXISTS hf_submission (
 CREATE INDEX IF NOT EXISTS hf_submission_answers_gin ON hf_submission USING GIN (answers);
 CREATE INDEX IF NOT EXISTS hf_submission_meta_gin    ON hf_submission USING GIN (meta);
 CREATE INDEX IF NOT EXISTS hf_submission_state_idx   ON hf_submission (state);
-CREATE INDEX IF NOT EXISTS hf_submission_date_idx    ON hf_submission (assessment_date);
+CREATE INDEX IF NOT EXISTS hf_submission_date_idx    ON hf_submission (assessment_date_text);
 
 -- Optional: keep updated_at fresh on edits
 CREATE OR REPLACE FUNCTION hf_touch_updated_at() RETURNS trigger AS $$
@@ -51,7 +53,7 @@ CREATE TRIGGER hf_submission_touch BEFORE UPDATE ON hf_submission
 CREATE OR REPLACE VIEW hf_answer_long AS
 SELECT s.id           AS submission_id,
        s.state,
-       s.assessment_date,
+       to_date(s.assessment_date_text, 'YYYY-MM-DD') AS assessment_date,
        kv.key         AS field_id,
        kv.value       AS value
 FROM   hf_submission s,

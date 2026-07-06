@@ -1,0 +1,182 @@
+"use client";
+
+// Admin response viewer — reachable only by navigating directly to /admin.
+// It is intentionally NOT linked from the questionnaire; the form page has no
+// button pointing here. Read-only: no editing or submitting.
+
+import { useCallback, useEffect, useState } from "react";
+
+export default function AdminPage() {
+  const [list, setList] = useState(null);
+  const [err, setErr] = useState("");
+  const [detail, setDetail] = useState(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+
+  const load = useCallback(async () => {
+    setErr("");
+    try {
+      const res = await fetch("/api/responses", { cache: "no-store" });
+      const data = await res.json();
+      if (data.ok) setList(data.submissions);
+      else setErr(data.error || "Failed to load");
+    } catch {
+      setErr("Network error — is the server/database reachable?");
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const open = async (id) => {
+    setLoadingDetail(true);
+    setDetail(null);
+    try {
+      const res = await fetch(`/api/responses?id=${id}`, { cache: "no-store" });
+      const data = await res.json();
+      if (data.ok) setDetail(data.submission);
+      else setErr(data.error || "Failed to load submission");
+    } catch {
+      setErr("Network error loading submission");
+    } finally {
+      setLoadingDetail(false);
+    }
+  };
+
+  const fmt = (t) => (t ? new Date(t).toLocaleString() : "—");
+
+  return (
+    <div style={S.page}>
+      <div style={S.head}>
+        <div>
+          <div style={S.eyebrow}>AHNi · Health Financing Assessment</div>
+          <h1 style={S.h1}>Submitted responses</h1>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button style={S.btn} onClick={load}>Refresh</button>
+          <a
+            style={{ ...S.btn, ...S.primary, textDecoration: "none", display: "inline-flex", alignItems: "center" }}
+            href="/api/export"
+          >
+            Export Excel
+          </a>
+        </div>
+      </div>
+
+      {err && <div style={S.err}>{err}</div>}
+
+      {!list && !err && <p style={S.muted}>Loading…</p>}
+
+      {list && (
+        <p style={S.muted}>
+          {list.length} submission{list.length === 1 ? "" : "s"}
+        </p>
+      )}
+
+      {list && list.length > 0 && (
+        <div style={S.tableWrap}>
+          <table style={S.table}>
+            <thead>
+              <tr>
+                {["#", "State", "Assessor", "Period", "Assessment date", "Complete", "Submitted", ""].map((h) => (
+                  <th key={h} style={S.th}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {list.map((r) => (
+                <tr key={r.id} style={S.tr}>
+                  <td style={S.td}>{r.id}</td>
+                  <td style={S.td}>{r.state || "—"}</td>
+                  <td style={S.td}>{r.assessor || "—"}</td>
+                  <td style={S.td}>{r.period || "—"}</td>
+                  <td style={S.td}>{r.assessment_date || "—"}</td>
+                  <td style={S.td}>{r.completion_pct != null ? `${r.completion_pct}%` : "—"}</td>
+                  <td style={S.td}>{fmt(r.created_at)}</td>
+                  <td style={S.td}>
+                    <button style={S.link} onClick={() => open(r.id)}>View</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {loadingDetail && <p style={S.muted}>Loading submission…</p>}
+
+      {detail && (
+        <div style={S.modalBg} onClick={() => setDetail(null)}>
+          <div style={S.modal} onClick={(e) => e.stopPropagation()}>
+            <div style={S.modalHead}>
+              <h2 style={S.h2}>Submission #{detail.id}</h2>
+              <button style={S.btn} onClick={() => setDetail(null)}>Close</button>
+            </div>
+
+            <h3 style={S.h3}>Metadata</h3>
+            <div style={S.kvGrid}>
+              {Object.entries(detail.meta || {}).map(([k, v]) => (
+                <div key={k} style={S.kvRow}>
+                  <span style={S.kvKey}>{k}</span>
+                  <span style={S.kvVal}>{String(v)}</span>
+                </div>
+              ))}
+              {(!detail.meta || Object.keys(detail.meta).length === 0) && (
+                <span style={S.muted}>No metadata</span>
+              )}
+            </div>
+
+            <h3 style={S.h3}>
+              Answers ({Object.keys(detail.answers || {}).length} fields)
+            </h3>
+            <div style={S.tableWrap}>
+              <table style={S.table}>
+                <thead>
+                  <tr>
+                    <th style={S.th}>Field ID</th>
+                    <th style={S.th}>Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(detail.answers || {})
+                    .sort(([a], [b]) => a.localeCompare(b))
+                    .map(([k, v]) => (
+                      <tr key={k} style={S.tr}>
+                        <td style={{ ...S.td, fontFamily: "monospace", whiteSpace: "nowrap" }}>{k}</td>
+                        <td style={S.td}>{typeof v === "object" ? JSON.stringify(v) : String(v)}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const RED = "#C8102E";
+const S = {
+  page: { maxWidth: 1100, margin: "0 auto", padding: "28px 20px 80px", fontFamily: "system-ui, sans-serif", color: "#1a1a1a" },
+  head: { display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16, marginBottom: 18, borderBottom: "1px solid #e5e7eb", paddingBottom: 14 },
+  eyebrow: { fontSize: 11, letterSpacing: ".08em", textTransform: "uppercase", color: RED, fontWeight: 700 },
+  h1: { margin: "4px 0 0", fontSize: 24 },
+  h2: { margin: 0, fontSize: 18 },
+  h3: { margin: "18px 0 8px", fontSize: 14, color: "#374151" },
+  muted: { color: "#6b7280", fontSize: 13 },
+  err: { background: "#FEF2F2", border: "1px solid #FCA5A5", color: "#991B1B", padding: "10px 12px", borderRadius: 8, margin: "10px 0", fontSize: 13 },
+  btn: { background: "#fff", border: "1px solid #d1d5db", borderRadius: 7, padding: "7px 14px", fontSize: 13, cursor: "pointer" },
+  primary: { background: RED, borderColor: RED, color: "#fff", fontWeight: 600 },
+  link: { background: "none", border: "none", color: RED, fontWeight: 600, cursor: "pointer", fontSize: 13, padding: 0 },
+  tableWrap: { overflowX: "auto", border: "1px solid #e5e7eb", borderRadius: 8, marginTop: 8 },
+  table: { borderCollapse: "collapse", width: "100%", fontSize: 13 },
+  th: { textAlign: "left", padding: "8px 10px", background: "#F7F8F9", borderBottom: "1px solid #e5e7eb", fontWeight: 700, whiteSpace: "nowrap" },
+  tr: { borderBottom: "1px solid #f0f1f3" },
+  td: { padding: "8px 10px", verticalAlign: "top" },
+  modalBg: { position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: 24, overflowY: "auto", zIndex: 50 },
+  modal: { background: "#fff", borderRadius: 12, padding: "20px 22px", maxWidth: 900, width: "100%", boxShadow: "0 20px 60px rgba(0,0,0,.3)" },
+  modalHead: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 },
+  kvGrid: { display: "flex", flexDirection: "column", gap: 4 },
+  kvRow: { display: "flex", gap: 10, fontSize: 13 },
+  kvKey: { minWidth: 130, color: "#6b7280", fontWeight: 600 },
+  kvVal: { flex: 1 },
+};
