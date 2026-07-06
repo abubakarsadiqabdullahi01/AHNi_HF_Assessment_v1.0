@@ -1,5 +1,6 @@
 import ExcelJS from "exceljs";
 import { getSql } from "../../../lib/db";
+import { adminAuth } from "../../../lib/adminAuth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,7 +28,19 @@ function styleHeader(row) {
 }
 
 // GET /api/export  → downloads a formatted .xlsx of every submission.
-export async function GET() {
+export async function GET(req) {
+  const state = adminAuth(req);
+  if (state === "unset")
+    return new Response(
+      JSON.stringify({ ok: false, error: "Admin access is not configured (set ADMIN_TOKEN)." }),
+      { status: 503, headers: { "Content-Type": "application/json" } }
+    );
+  if (state === "denied")
+    return new Response(JSON.stringify({ ok: false, error: "Unauthorized" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
+
   try {
     const sql = getSql();
     const rows = await sql`

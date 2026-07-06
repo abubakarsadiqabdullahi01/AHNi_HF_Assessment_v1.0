@@ -6,31 +6,81 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+const TOKEN_KEY = "ahni_admin_token";
+
 export default function AdminPage() {
+  const [token, setToken] = useState("");
+  const [authed, setAuthed] = useState(false);
+  const [tokenInput, setTokenInput] = useState("");
   const [list, setList] = useState(null);
   const [err, setErr] = useState("");
   const [detail, setDetail] = useState(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
 
-  const load = useCallback(async () => {
+  // fetch wrapper that attaches the admin token
+  const authFetch = useCallback(
+    (path, tok) =>
+      fetch(path, {
+        cache: "no-store",
+        headers: { Authorization: `Bearer ${tok}` },
+      }),
+    []
+  );
+
+  const load = useCallback(async (tok) => {
     setErr("");
     try {
-      const res = await fetch("/api/responses", { cache: "no-store" });
+      const res = await authFetch("/api/responses", tok);
+      if (res.status === 401) {
+        setAuthed(false);
+        setErr("Incorrect access token.");
+        return false;
+      }
       const data = await res.json();
-      if (data.ok) setList(data.submissions);
-      else setErr(data.error || "Failed to load");
+      if (data.ok) {
+        setList(data.submissions);
+        setAuthed(true);
+        return true;
+      }
+      setErr(data.error || "Failed to load");
+      return false;
     } catch {
       setErr("Network error — is the server/database reachable?");
+      return false;
     }
-  }, []);
+  }, [authFetch]);
 
-  useEffect(() => { load(); }, [load]);
+  // On mount, try a saved token silently.
+  useEffect(() => {
+    const saved = typeof window !== "undefined" ? sessionStorage.getItem(TOKEN_KEY) : "";
+    if (saved) {
+      setToken(saved);
+      load(saved).then((ok) => { if (!ok) sessionStorage.removeItem(TOKEN_KEY); });
+    }
+  }, [load]);
+
+  const signIn = async (e) => {
+    e.preventDefault();
+    const t = tokenInput.trim();
+    if (!t) return;
+    const ok = await load(t);
+    if (ok) {
+      setToken(t);
+      try { sessionStorage.setItem(TOKEN_KEY, t); } catch {}
+      setTokenInput("");
+    }
+  };
+
+  const signOut = () => {
+    try { sessionStorage.removeItem(TOKEN_KEY); } catch {}
+    setToken(""); setAuthed(false); setList(null); setDetail(null); setErr("");
+  };
 
   const open = async (id) => {
     setLoadingDetail(true);
     setDetail(null);
     try {
-      const res = await fetch(`/api/responses?id=${id}`, { cache: "no-store" });
+      const res = await authFetch(`/api/responses?id=${id}`, token);
       const data = await res.json();
       if (data.ok) setDetail(data.submission);
       else setErr(data.error || "Failed to load submission");
@@ -43,6 +93,31 @@ export default function AdminPage() {
 
   const fmt = (t) => (t ? new Date(t).toLocaleString() : "—");
 
+  // ---- Login gate ----
+  if (!authed) {
+    return (
+      <div style={S.page}>
+        <div style={{ maxWidth: 380, margin: "12vh auto 0" }}>
+          <div style={S.eyebrow}>AHNi · Health Financing Assessment</div>
+          <h1 style={S.h1}>Admin access</h1>
+          <p style={S.muted}>Enter the access token to view submitted responses.</p>
+          <form onSubmit={signIn} style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+            <input
+              type="password"
+              autoFocus
+              value={tokenInput}
+              onChange={(e) => setTokenInput(e.target.value)}
+              placeholder="Access token"
+              style={S.input}
+            />
+            <button type="submit" style={{ ...S.btn, ...S.primary }}>Enter</button>
+          </form>
+          {err && <div style={S.err}>{err}</div>}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={S.page}>
       <div style={S.head}>
@@ -51,13 +126,14 @@ export default function AdminPage() {
           <h1 style={S.h1}>Submitted responses</h1>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <button style={S.btn} onClick={load}>Refresh</button>
+          <button style={S.btn} onClick={() => load(token)}>Refresh</button>
           <a
             style={{ ...S.btn, ...S.primary, textDecoration: "none", display: "inline-flex", alignItems: "center" }}
-            href="/api/export"
+            href={`/api/export?token=${encodeURIComponent(token)}`}
           >
             Export Excel
           </a>
+          <button style={S.btn} onClick={signOut}>Sign out</button>
         </div>
       </div>
 
@@ -166,6 +242,7 @@ const S = {
   err: { background: "#FEF2F2", border: "1px solid #FCA5A5", color: "#991B1B", padding: "10px 12px", borderRadius: 8, margin: "10px 0", fontSize: 13 },
   btn: { background: "#fff", border: "1px solid #d1d5db", borderRadius: 7, padding: "7px 14px", fontSize: 13, cursor: "pointer" },
   primary: { background: RED, borderColor: RED, color: "#fff", fontWeight: 600 },
+  input: { border: "1px solid #d1d5db", borderRadius: 7, padding: "9px 12px", fontSize: 14 },
   link: { background: "none", border: "none", color: RED, fontWeight: 600, cursor: "pointer", fontSize: 13, padding: 0 },
   tableWrap: { overflowX: "auto", border: "1px solid #e5e7eb", borderRadius: 8, marginTop: 8 },
   table: { borderCollapse: "collapse", width: "100%", fontSize: 13 },
