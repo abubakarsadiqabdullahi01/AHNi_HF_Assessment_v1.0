@@ -58,6 +58,25 @@ function BinField({ base, item, initR, initN, commit }) {
   );
 }
 
+function QaLikert({ base, scale, store, commit }) {
+  const cls = ["l1", "l2", "l3", "l4", "l5"];
+  const [sel, setSel] = useState(store.answers[`${base}-lk`] ?? "");
+  return (
+    <>
+      <div className="likert">
+        {scale.map((o, idx) => (
+          <label className={cls[idx] || ""} key={o}>
+            <input type="radio" name={`${base}-lk`} value={o} checked={sel === o}
+              onChange={() => { setSel(o); commit(`${base}-lk`, o); }} />
+            {o}
+          </label>
+        ))}
+      </div>
+      <TextArea id={`${base}-n`} initial={store.answers[`${base}-n`]} commit={commit} ph="Explanation" />
+    </>
+  );
+}
+
 function SubFields({ base, num, n, ph, store, commit }) {
   const rows = [];
   for (let k = 1; k <= n; k++) {
@@ -88,6 +107,10 @@ function BudgetTable({ base, store, commit }) {
     const s = parseFloat(stateB[y]), h = parseFloat(healthB[y]);
     return isFinite(s) && isFinite(h) && s > 0 ? (h / s * 100).toFixed(1) + "%" : "—";
   };
+  const pctRel = (y) => {
+    const h = parseFloat(healthB[y]), r = parseFloat(released[y]);
+    return isFinite(h) && isFinite(r) && h > 0 ? (r / h * 100).toFixed(1) + "%" : "—";
+  };
 
   return (
     <>
@@ -113,6 +136,8 @@ function BudgetTable({ base, store, commit }) {
               {yrs.map((y) => <td key={y}><input type="number" value={released[y]} onChange={(e) => upd(setReleased, released, y, e.target.value, "released")} /></td>)}</tr>
             <tr><td className="src">% Budget allocation to health <small>(auto)</small></td>
               {yrs.map((y) => <td key={y}><output className="pct">{pct(y)}</output></td>)}</tr>
+            <tr><td className="src">% Health budget released <small>(auto)</small></td>
+              {yrs.map((y) => <td key={y}><output className="pct">{pctRel(y)}</output></td>)}</tr>
             <tr><td className="src">Health programme areas receiving direct State funding</td>
               {yrs.map((y) => <td key={y}><input type="text" value={prog[y]} placeholder="…" onChange={(e) => upd(setProg, prog, y, e.target.value, "progareas")} /></td>)}</tr>
           </tbody>
@@ -233,6 +258,7 @@ function Section({ sec, store, commit }) {
       let inner;
       if (it.kind === "bin") inner = <BinField base={base} item={it} initR={store.answers[`${base}-r`]} initN={store.answers[`${base}-n`]} commit={commit} />;
       else if (it.kind === "sub") inner = <SubFields base={base} num={num} n={it.n || 5} ph={it.ph || "Response"} store={store} commit={commit} />;
+      else if (it.kind === "likert") inner = <QaLikert base={base} scale={it.scale || []} store={store} commit={commit} />;
       else if (it.kind === "budget") inner = <BudgetTable base={base} store={store} commit={commit} />;
       else inner = <TextArea id={base} initial={store.answers[base]} commit={commit} ph="Enter response…" />;
       return (
