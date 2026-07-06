@@ -62,6 +62,14 @@
   .donecard h1{font-size:22px;margin:0 0 10px;color:var(--ink);}
   .donecard p{color:var(--muted);font-size:14.5px;line-height:1.5;margin:0 0 24px;}
 
+  /* Required-field markers */
+  .req{color:var(--red);margin-left:3px;font-weight:700;}
+  .field-error input,.field-error select{border-color:var(--red) !important;
+    background:var(--red-tint);}
+  .req-msg{display:block;color:var(--red);font-size:11px;font-weight:700;margin-top:3px;}
+  .req-legend{color:var(--muted);font-size:12px;margin:0 0 14px;}
+  .req-legend .req{margin-left:0;margin-right:3px;}
+
   /* ---------- Layout ---------- */
   .wrap{max-width:1180px;margin:0 auto;padding:24px 20px 120px;display:grid;
     grid-template-columns:220px 1fr;gap:28px;align-items:start;}

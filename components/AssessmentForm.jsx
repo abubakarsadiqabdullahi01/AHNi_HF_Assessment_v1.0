@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { META, SECTIONS, BIN_OPTS, LIKERT, normItem, repIds } from "../lib/formModel";
+import { META, SECTIONS, BIN_OPTS, LIKERT, normItem, repIds, REQUIRED_META } from "../lib/formModel";
 
 const STORE_KEY = "ahni_hf_form_v1";
 const SUBMIT_URL = "/api/submit";
@@ -221,13 +221,14 @@ function CheckItem({ base, index, opp, store, commit }) {
   );
 }
 
-function MetaField({ f, store, commitMeta }) {
+function MetaField({ f, store, commitMeta, invalid }) {
   const [v, setV] = useState(store.meta[f.id] ?? f.value ?? "");
   useEffect(() => { if (f.value && store.meta[f.id] === undefined) commitMeta(f.id, f.value); }, []); // eslint-disable-line
   const on = (e) => { setV(e.target.value); commitMeta(f.id, e.target.value); };
+  const showErr = invalid && (v ?? "") === "";
   return (
-    <div className="field">
-      <label>{f.label}</label>
+    <div className={`field${showErr ? " field-error" : ""}`}>
+      <label>{f.label}{f.required && <span className="req">*</span>}</label>
       {f.type === "select" ? (
         <select value={v} onChange={on}>
           {f.options.map((o) => <option key={o} value={o}>{o ? o : "Select…"}</option>)}
@@ -235,6 +236,7 @@ function MetaField({ f, store, commitMeta }) {
       ) : (
         <input type={f.type} value={v} placeholder={f.ph || ""} onChange={on} />
       )}
+      {showErr && <span className="req-msg">Required</span>}
     </div>
   );
 }
@@ -311,6 +313,7 @@ export default function AssessmentForm() {
   const [toast, setToast] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(null); // { id } after a successful submit
+  const [missingMeta, setMissingMeta] = useState([]); // required meta ids left empty
   const fileRef = useRef(null);
   const toastTimer = useRef(null);
   const debounce = useRef(null);
@@ -395,6 +398,16 @@ export default function AssessmentForm() {
   };
 
   const submit = async () => {
+    // Block submit until required identifying fields are filled.
+    const missing = REQUIRED_META.filter((id) => (store.current.meta[id] ?? "") === "");
+    if (missing.length) {
+      setMissingMeta(missing);
+      const labels = missing.map((id) => META.find((m) => m.id === id)?.label || id);
+      showToast(`Please fill required field${missing.length > 1 ? "s" : ""}: ${labels.join(", ")}`);
+      if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    setMissingMeta([]);
     setSubmitting(true);
     try {
       const payload = {
@@ -503,8 +516,9 @@ export default function AssessmentForm() {
 
           <div key={formKey}>
             <div className="card">
+              <p className="req-legend"><span className="req">*</span>Required — these fields must be filled before you can submit.</p>
               <div className="meta-grid">
-                {META.map((f) => <MetaField key={f.id} f={f} store={store.current} commitMeta={commitMeta} />)}
+                {META.map((f) => <MetaField key={f.id} f={f} store={store.current} commitMeta={commitMeta} invalid={missingMeta.includes(f.id)} />)}
               </div>
             </div>
             {SECTIONS.map((s) => <Section key={s.id} sec={s} store={store.current} commit={commit} />)}

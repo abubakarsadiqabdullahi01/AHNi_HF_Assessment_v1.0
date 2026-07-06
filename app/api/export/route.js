@@ -1,6 +1,7 @@
 import ExcelJS from "exceljs";
 import { getSql } from "../../../lib/db";
 import { adminAuth } from "../../../lib/adminAuth";
+import { fieldDictionary } from "../../../lib/formModel";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,6 +50,7 @@ export async function GET(req) {
       FROM   hf_submission
       ORDER  BY created_at DESC`;
 
+    const dict = fieldDictionary();
     const wb = new ExcelJS.Workbook();
     wb.creator = "AHNi Health Financing Assessment";
     wb.created = new Date();
@@ -80,11 +82,13 @@ export async function GET(req) {
       views: [{ state: "frozen", ySplit: 1 }],
     });
     s2.columns = [
-      { header: "Submission ID", key: "sid", width: 14 },
-      { header: "State", key: "state", width: 16 },
-      { header: "Assessor", key: "assessor", width: 20 },
+      { header: "Submission ID", key: "sid", width: 13 },
+      { header: "State", key: "state", width: 14 },
+      { header: "Assessor", key: "assessor", width: 18 },
+      { header: "Section", key: "section", width: 26 },
       { header: "Field ID", key: "field", width: 16 },
-      { header: "Answer", key: "value", width: 70 },
+      { header: "Question", key: "question", width: 60 },
+      { header: "Answer", key: "value", width: 60 },
     ];
     for (const r of rows) {
       const m = r.meta || {};
@@ -92,16 +96,20 @@ export async function GET(req) {
       const keys = Object.keys(answers).sort((a, b) => a.localeCompare(b));
       for (const k of keys) {
         const v = answers[k];
+        const info = dict[k];
         s2.addRow({
           sid: Number(r.id),
           state: m.state ?? "",
           assessor: m.assessor ?? "",
+          section: info ? `${info.section} · ${info.sectionTitle}` : "",
           field: k,
+          question: info ? info.question : "",
           value: typeof v === "object" ? JSON.stringify(v) : String(v),
         });
       }
     }
     styleHeader(s2.getRow(1));
+    s2.getColumn("question").alignment = { wrapText: true, vertical: "top" };
     s2.getColumn("value").alignment = { wrapText: true, vertical: "top" };
     s2.autoFilter = { from: "A1", to: { row: 1, column: s2.columnCount } };
 

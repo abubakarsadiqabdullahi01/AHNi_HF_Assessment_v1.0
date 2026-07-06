@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSql } from "../../../lib/db";
+import { REQUIRED_META } from "../../../lib/formModel";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,6 +19,15 @@ export async function POST(req) {
 
   if (!answers || typeof answers !== "object") {
     return NextResponse.json({ ok: false, error: "Missing answers object" }, { status: 400 });
+  }
+
+  // Reject submissions that omit the required identifying fields.
+  const missing = REQUIRED_META.filter((id) => !meta || (meta[id] ?? "") === "");
+  if (missing.length) {
+    return NextResponse.json(
+      { ok: false, error: `Missing required field(s): ${missing.join(", ")}` },
+      { status: 400 }
+    );
   }
 
   try {
