@@ -49,6 +49,18 @@
   .btn.primary{background:var(--red);border-color:var(--red);}
   .btn.primary:hover{background:var(--red-deep);}
   .btn:focus-visible{outline:2px solid #fff;outline-offset:2px;}
+  .btn.big{font-size:15px;padding:12px 26px;border-radius:9px;}
+
+  /* ---------- Post-submit confirmation ---------- */
+  .donewrap{min-height:70vh;display:flex;align-items:center;justify-content:center;padding:40px 20px;}
+  .donecard{background:var(--paper);border:1px solid var(--line);border-radius:16px;
+    padding:44px 40px;max-width:460px;width:100%;text-align:center;
+    box-shadow:0 10px 40px rgba(0,0,0,.06);}
+  .donecheck{width:64px;height:64px;margin:0 auto 18px;border-radius:50%;
+    background:var(--red-tint);color:var(--red);font-size:34px;font-weight:800;
+    display:flex;align-items:center;justify-content:center;}
+  .donecard h1{font-size:22px;margin:0 0 10px;color:var(--ink);}
+  .donecard p{color:var(--muted);font-size:14.5px;line-height:1.5;margin:0 0 24px;}
 
   /* ---------- Layout ---------- */
   .wrap{max-width:1180px;margin:0 auto;padding:24px 20px 120px;display:grid;

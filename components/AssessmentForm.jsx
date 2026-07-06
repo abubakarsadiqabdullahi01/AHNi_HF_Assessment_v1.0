@@ -310,6 +310,7 @@ export default function AssessmentForm() {
   const [doneSecs, setDoneSecs] = useState({});
   const [toast, setToast] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(null); // { id } after a successful submit
   const fileRef = useRef(null);
   const toastTimer = useRef(null);
   const debounce = useRef(null);
@@ -409,14 +410,53 @@ export default function AssessmentForm() {
         body: JSON.stringify(payload),
       });
       const data = await res.json().catch(() => ({}));
-      if (res.ok && data.ok) showToast(`Submitted ✓  (record #${data.id})`);
-      else showToast(`Submit failed: ${data.error || res.status}`);
+      if (res.ok && data.ok) {
+        // Success: clear the form + saved draft and show the confirmation screen.
+        store.current = { meta: {}, answers: {} };
+        persist();
+        recompute();
+        setFormKey((k) => k + 1);
+        setSubmitted({ id: data.id });
+        if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+      } else {
+        showToast(`Submit failed: ${data.error || res.status}`);
+      }
     } catch {
       showToast("Network error — is the server/database reachable?");
     } finally {
       setSubmitting(false);
     }
   };
+
+  const startNewForm = () => {
+    setSubmitted(null);
+    store.current = { meta: {}, answers: {} };
+    persist();
+    recompute();
+    setFormKey((k) => k + 1);
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  if (submitted) {
+    return (
+      <>
+        <div className="topbar">
+          <div className="brand">
+            <span className="logochip"><img className="logo-img" src="/ahni-logo.png" alt="AHNi — Achieving Health Nigeria Initiative" /></span>
+            <span className="sub">Prevention, Care &amp; Treatment · GHSD Transition Assessment</span>
+          </div>
+        </div>
+        <div className="donewrap">
+          <div className="donecard">
+            <div className="donecheck">✓</div>
+            <h1>Response submitted</h1>
+            <p>Thank you — your assessment has been saved to the AHNi database{submitted.id ? <> (record <strong>#{submitted.id}</strong>)</> : null}.</p>
+            <button className="btn primary big" onClick={startNewForm}>Fill another form</button>
+          </div>
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
