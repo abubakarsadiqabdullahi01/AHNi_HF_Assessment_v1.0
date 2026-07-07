@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSql } from "../../../../lib/db";
-import { REQUIRED_HEADER, instrumentById } from "../../../../lib/mealModel";
+import { targetById, requiredFor } from "../../../../lib/mealModel";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,14 +18,14 @@ export async function POST(req) {
   const answers = body?.answers ?? {};
   const completion = body?.completion_pct ?? null;
 
-  if (!instrumentById(instrument)) {
+  if (!targetById(instrument)) {
     return NextResponse.json({ ok: false, error: "Unknown instrument" }, { status: 400 });
   }
   if (!answers || typeof answers !== "object") {
     return NextResponse.json({ ok: false, error: "Missing answers object" }, { status: 400 });
   }
 
-  const missing = REQUIRED_HEADER.filter((id) => (meta?.[id] ?? "") === "");
+  const missing = requiredFor(instrument).filter((id) => (meta?.[id] ?? "") === "");
   if (missing.length) {
     return NextResponse.json(
       { ok: false, error: `Missing required field(s): ${missing.join(", ")}` },

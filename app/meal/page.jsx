@@ -17,6 +17,11 @@ export default function MealHome() {
           Select an instrument to complete. Each instrument is submitted separately with its own
           site header. Choose the one that matches your role and level (state, LGA or facility).
         </p>
+        <div className="mt-4 flex flex-wrap gap-3">
+          <Button variant="outline" asChild><Link href="/meal/annexC">Annex C · Sampling worksheet</Link></Button>
+          <Button variant="outline" asChild><Link href="/meal/annexD">Annex D · Roster &amp; daily QA</Link></Button>
+          <Button variant="ghost" asChild><Link href="/meal/reference">Reference (Annex A &amp; B)</Link></Button>
+        </div>
       </header>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
