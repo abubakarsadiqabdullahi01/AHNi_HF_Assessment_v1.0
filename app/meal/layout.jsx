@@ -1,4 +1,5 @@
 import "./meal.css";
+import MealHeader from "../../components/meal/MealHeader";
 
 export const metadata = {
   title: "AHNi MEAL Rapid Assessment Tool",
@@ -6,5 +7,10 @@ export const metadata = {
 };
 
 export default function MealLayout({ children }) {
-  return <div className="meal-root min-h-screen antialiased">{children}</div>;
+  return (
+    <div className="meal-root min-h-screen antialiased">
+      <MealHeader />
+      {children}
+    </div>
+  );
 }
