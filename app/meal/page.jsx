@@ -9,9 +9,7 @@ export default function MealHome() {
   return (
     <div className="mx-auto max-w-5xl px-5 py-10">
       <header className="mb-8">
-        <p className="text-xs font-bold uppercase tracking-wider text-primary">
-          AHNi · Monitoring, Evaluation, Accountability &amp; Learning
-        </p>
+        <p className="text-xs font-bold uppercase tracking-wider text-primary">State Situation Analysis</p>
         <h1 className="mt-1 text-2xl font-bold text-foreground">MEAL Rapid Assessment Tool</h1>
         <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
           Choose your level. You’ll enter the site details once, then step through that level’s
