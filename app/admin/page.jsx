@@ -272,6 +272,7 @@ export default function AdminPage() {
             <div style={S.modalHead}>
               <h2 style={S.h2}>Submission #{detail.id}</h2>
               <div style={{ display: "flex", gap: 8 }}>
+                <button style={{ ...S.btn, ...S.primary }} onClick={() => exportXlsx([detail.id])}>Export</button>
                 <button style={{ ...S.btn, ...S.dangerBtn }} onClick={() => remove(detail.id)}>Delete</button>
                 <button style={S.btn} onClick={() => setDetail(null)}>Close</button>
               </div>
