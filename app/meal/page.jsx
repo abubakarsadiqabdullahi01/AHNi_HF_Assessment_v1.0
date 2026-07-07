@@ -17,11 +17,6 @@ export default function MealHome() {
           Choose your level. You’ll enter the site details once, then step through that level’s
           instruments and submit them together at the end.
         </p>
-        <div className="mt-4 flex flex-wrap gap-3">
-          <Button variant="outline" asChild><Link href="/meal/annexC">Annex C · Sampling worksheet</Link></Button>
-          <Button variant="outline" asChild><Link href="/meal/annexD">Annex D · Roster &amp; daily QA</Link></Button>
-          <Button variant="ghost" asChild><Link href="/meal/reference">Reference (Annex A &amp; B)</Link></Button>
-        </div>
       </header>
 
       <div className="grid gap-5 md:grid-cols-3">
