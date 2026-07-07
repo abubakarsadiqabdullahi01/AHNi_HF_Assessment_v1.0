@@ -42,13 +42,27 @@ export async function GET(req) {
       headers: { "Content-Type": "application/json" },
     });
 
+  // Optional ?ids=1,2,3 to export only selected submissions (default: all).
+  const idsParam = new URL(req.url).searchParams.get("ids");
+  const ids = idsParam
+    ? idsParam.split(",").map((s) => Number(s.trim())).filter((n) => Number.isInteger(n) && n > 0)
+    : null;
+
   try {
     const sql = getSql();
-    const rows = await sql`
-      SELECT id, form_id, form_version, meta, answers,
-             completion_pct, submitted_by, created_at
-      FROM   hf_submission
-      ORDER  BY created_at DESC`;
+    const rows =
+      ids && ids.length
+        ? await sql`
+            SELECT id, form_id, form_version, meta, answers,
+                   completion_pct, submitted_by, created_at
+            FROM   hf_submission
+            WHERE  id = ANY(${ids})
+            ORDER  BY created_at DESC`
+        : await sql`
+            SELECT id, form_id, form_version, meta, answers,
+                   completion_pct, submitted_by, created_at
+            FROM   hf_submission
+            ORDER  BY created_at DESC`;
 
     const dict = fieldDictionary();
     const wb = new ExcelJS.Workbook();
@@ -115,11 +129,13 @@ export async function GET(req) {
 
     const buf = await wb.xlsx.writeBuffer();
     const stamp = new Date().toISOString().slice(0, 10);
+    const scope =
+      ids && ids.length ? (ids.length === 1 ? `record-${ids[0]}` : `${ids.length}-records`) : "all";
     return new Response(buf, {
       status: 200,
       headers: {
         "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "Content-Disposition": `attachment; filename="AHNi-HealthFinancing-Responses-${stamp}.xlsx"`,
+        "Content-Disposition": `attachment; filename="AHNi-HealthFinancing-${scope}-${stamp}.xlsx"`,
         "Cache-Control": "no-store",
       },
     });

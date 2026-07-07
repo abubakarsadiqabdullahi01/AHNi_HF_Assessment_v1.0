@@ -16,6 +16,7 @@ export default function AdminPage() {
   const [err, setErr] = useState("");
   const [detail, setDetail] = useState(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [selected, setSelected] = useState(() => new Set());
 
   // fetch wrapper that attaches the admin token
   const authFetch = useCallback(
@@ -112,6 +113,49 @@ export default function AdminPage() {
     }
   };
 
+  const toggleRow = (id) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      const key = String(id);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+
+  const toggleAll = () =>
+    setSelected((prev) => {
+      const ids = (list || []).map((r) => String(r.id));
+      const allSelected = ids.length > 0 && ids.every((id) => prev.has(id));
+      return allSelected ? new Set() : new Set(ids);
+    });
+
+  // Download an .xlsx via authenticated fetch (keeps the token out of the URL).
+  const exportXlsx = async (ids) => {
+    setErr("");
+    try {
+      const qs = ids && ids.length ? `?ids=${ids.join(",")}` : "";
+      const res = await fetch(`/api/export${qs}`, {
+        cache: "no-store",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setErr(data.error || `Export failed (${res.status})`);
+        return;
+      }
+      const blob = await res.blob();
+      const cd = res.headers.get("Content-Disposition") || "";
+      const m = cd.match(/filename="?([^"]+)"?/);
+      const name = m ? m[1] : "AHNi-HealthFinancing-export.xlsx";
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = name;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      setErr("Network error while exporting");
+    }
+  };
+
   const fmt = (t) => (t ? new Date(t).toLocaleString() : "—");
 
   // ---- Login gate ----
@@ -148,12 +192,13 @@ export default function AdminPage() {
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <button style={S.btn} onClick={() => load(token)}>Refresh</button>
-          <a
-            style={{ ...S.btn, ...S.primary, textDecoration: "none", display: "inline-flex", alignItems: "center" }}
-            href={`/api/export?token=${encodeURIComponent(token)}`}
+          <button
+            style={{ ...S.btn, ...S.primary }}
+            onClick={() => exportXlsx(selected.size ? [...selected] : null)}
+            title={selected.size ? "Export the selected rows" : "Export all responses"}
           >
-            Export Excel
-          </a>
+            {selected.size ? `Export selected (${selected.size})` : "Export all"}
+          </button>
           <button style={S.btn} onClick={signOut}>Sign out</button>
         </div>
       </div>
