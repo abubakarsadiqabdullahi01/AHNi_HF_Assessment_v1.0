@@ -32,13 +32,15 @@ export default function MealHome() {
               <p className="text-sm text-muted-foreground">{g.note}</p>
             </CardHeader>
             <CardContent className="flex flex-1 flex-col">
-              <ul className="mb-5 space-y-1.5 text-sm">
+              <ul className="mb-5 space-y-2 text-sm">
                 {g.ids.map((id) => {
                   const inst = instrumentById(id);
                   return (
-                    <li key={id} className="flex gap-2">
-                      <span className="font-semibold text-primary">Instrument {id}</span>
-                      <span className="text-muted-foreground">{inst?.title}</span>
+                    <li key={id} className="flex items-start gap-2.5">
+                      <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded bg-accent text-xs font-bold text-primary">
+                        {id}
+                      </span>
+                      <span className="leading-snug text-foreground">{inst?.title}</span>
                     </li>
                   );
                 })}
