@@ -104,6 +104,7 @@ export default function AdminPage() {
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.ok) {
         setList((prev) => (prev || []).filter((r) => String(r.id) !== String(id)));
+        setSelected((prev) => { const n = new Set(prev); n.delete(String(id)); return n; });
         if (detail && String(detail.id) === String(id)) setDetail(null);
       } else {
         setErr(data.error || `Delete failed (${res.status})`);
@@ -218,6 +219,14 @@ export default function AdminPage() {
           <table style={S.table}>
             <thead>
               <tr>
+                <th style={S.th}>
+                  <input
+                    type="checkbox"
+                    aria-label="Select all"
+                    checked={list.length > 0 && list.every((r) => selected.has(String(r.id)))}
+                    onChange={toggleAll}
+                  />
+                </th>
                 {["#", "State", "Assessor", "Period", "Assessment date", "Complete", "Submitted", ""].map((h) => (
                   <th key={h} style={S.th}>{h}</th>
                 ))}
@@ -226,6 +235,14 @@ export default function AdminPage() {
             <tbody>
               {list.map((r) => (
                 <tr key={r.id} style={S.tr}>
+                  <td style={S.td}>
+                    <input
+                      type="checkbox"
+                      aria-label={`Select submission ${r.id}`}
+                      checked={selected.has(String(r.id))}
+                      onChange={() => toggleRow(r.id)}
+                    />
+                  </td>
                   <td style={S.td}>{r.id}</td>
                   <td style={S.td}>{r.state || "—"}</td>
                   <td style={S.td}>{r.assessor || "—"}</td>
@@ -236,8 +253,8 @@ export default function AdminPage() {
                   <td style={S.td}>
                     <div style={{ display: "flex", gap: 12 }}>
                       <button style={S.link} onClick={() => open(r.id)}>View</button>
+                      <button style={S.link} onClick={() => exportXlsx([r.id])}>Export</button>
                       <button style={{ ...S.link, ...S.danger }} onClick={() => remove(r.id)}>Delete</button>
-                      
                     </div>
                   </td>
                 </tr>
