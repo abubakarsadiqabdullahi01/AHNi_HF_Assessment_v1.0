@@ -1,0 +1,32 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* shadcn/ui design tokens — AHNi brand (red primary). These load only on the
+   /meal routes (imported by app/meal/layout.jsx), so the existing Health
+   Financing form's styling is untouched. */
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 220 13% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 220 13% 12%;
+    --primary: 350 86% 40%;            /* AHNi red ~ #C8102E */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 220 13% 20%;
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 9% 42%;
+    --accent: 350 86% 96%;
+    --accent-foreground: 350 86% 30%;
+    --destructive: 0 72% 45%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 13% 88%;
+    --input: 220 13% 85%;
+    --ring: 350 86% 40%;
+    --radius: 0.65rem;
+  }
+
+  * { border-color: hsl(var(--border)); }
+  .meal-root { background: hsl(var(--secondary)); color: hsl(var(--foreground)); }
+}
