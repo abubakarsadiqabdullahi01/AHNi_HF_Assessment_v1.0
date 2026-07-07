@@ -61,3 +61,28 @@ export async function GET(req) {
     );
   }
 }
+
+// Delete a single submission:  DELETE /api/responses?id=<n>
+export async function DELETE(req) {
+  const denied = guard(req);
+  if (denied) return denied;
+
+  const id = new URL(req.url).searchParams.get("id");
+  if (!id) {
+    return NextResponse.json({ ok: false, error: "Missing id" }, { status: 400 });
+  }
+
+  try {
+    const sql = getSql();
+    const rows = await sql`DELETE FROM hf_submission WHERE id = ${id} RETURNING id`;
+    if (!rows.length) {
+      return NextResponse.json({ ok: false, error: "Not found" }, { status: 404 });
+    }
+    return NextResponse.json({ ok: true, id: rows[0].id });
+  } catch (err) {
+    return NextResponse.json(
+      { ok: false, error: String(err.message || err) },
+      { status: 500 }
+    );
+  }
+}

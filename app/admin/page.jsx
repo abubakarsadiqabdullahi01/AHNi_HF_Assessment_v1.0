@@ -91,6 +91,27 @@ export default function AdminPage() {
     }
   };
 
+  const remove = async (id) => {
+    if (!confirm(`Delete submission #${id}? This cannot be undone.`)) return;
+    setErr("");
+    try {
+      const res = await fetch(`/api/responses?id=${id}`, {
+        method: "DELETE",
+        cache: "no-store",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.ok) {
+        setList((prev) => (prev || []).filter((r) => String(r.id) !== String(id)));
+        if (detail && String(detail.id) === String(id)) setDetail(null);
+      } else {
+        setErr(data.error || `Delete failed (${res.status})`);
+      }
+    } catch {
+      setErr("Network error while deleting");
+    }
+  };
+
   const fmt = (t) => (t ? new Date(t).toLocaleString() : "—");
 
   // ---- Login gate ----
@@ -168,7 +189,11 @@ export default function AdminPage() {
                   <td style={S.td}>{r.completion_pct != null ? `${r.completion_pct}%` : "—"}</td>
                   <td style={S.td}>{fmt(r.created_at)}</td>
                   <td style={S.td}>
-                    <button style={S.link} onClick={() => open(r.id)}>View</button>
+                    <div style={{ display: "flex", gap: 12 }}>
+                      <button style={S.link} onClick={() => open(r.id)}>View</button>
+                      <button style={{ ...S.link, ...S.danger }} onClick={() => remove(r.id)}>Delete</button>
+                      
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -184,7 +209,10 @@ export default function AdminPage() {
           <div style={S.modal} onClick={(e) => e.stopPropagation()}>
             <div style={S.modalHead}>
               <h2 style={S.h2}>Submission #{detail.id}</h2>
-              <button style={S.btn} onClick={() => setDetail(null)}>Close</button>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button style={{ ...S.btn, ...S.dangerBtn }} onClick={() => remove(detail.id)}>Delete</button>
+                <button style={S.btn} onClick={() => setDetail(null)}>Close</button>
+              </div>
             </div>
 
             <h3 style={S.h3}>Metadata</h3>
@@ -244,6 +272,8 @@ const S = {
   primary: { background: RED, borderColor: RED, color: "#fff", fontWeight: 600 },
   input: { border: "1px solid #d1d5db", borderRadius: 7, padding: "9px 12px", fontSize: 14 },
   link: { background: "none", border: "none", color: RED, fontWeight: 600, cursor: "pointer", fontSize: 13, padding: 0 },
+  danger: { color: "#B00020" },
+  dangerBtn: { color: "#B00020", borderColor: "#F1B0B7" },
   tableWrap: { overflowX: "auto", border: "1px solid #e5e7eb", borderRadius: 8, marginTop: 8 },
   table: { borderCollapse: "collapse", width: "100%", fontSize: 13 },
   th: { textAlign: "left", padding: "8px 10px", background: "#F7F8F9", borderBottom: "1px solid #e5e7eb", fontWeight: 700, whiteSpace: "nowrap" },
