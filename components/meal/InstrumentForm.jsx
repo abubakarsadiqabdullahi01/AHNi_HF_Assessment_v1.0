@@ -54,11 +54,13 @@ export default function InstrumentForm({ inst }) {
   const [missing, setMissing] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(null);
+  const [locked, setLocked] = useState(false); // already submitted from this device
   const [toast, setToast] = useState("");
 
-  // load draft
+  // load draft + one-submission lock
   useEffect(() => {
     try {
+      if (localStorage.getItem(`${STORE_KEY}_done`)) { setLocked(true); return; }
       const raw = localStorage.getItem(STORE_KEY);
       if (raw) {
         const p = JSON.parse(raw);
@@ -134,7 +136,7 @@ export default function InstrumentForm({ inst }) {
       if (res.ok && data.ok) {
         setSubmitted({ id: data.id });
         setMeta({}); setAnswers({});
-        try { localStorage.removeItem(STORE_KEY); } catch {}
+        try { localStorage.removeItem(STORE_KEY); localStorage.setItem(`${STORE_KEY}_done`, "1"); } catch {}
         window.scrollTo({ top: 0, behavior: "smooth" });
       } else {
         showToast(`Submit failed: ${data.error || res.status}`);
@@ -146,17 +148,20 @@ export default function InstrumentForm({ inst }) {
     }
   };
 
-  if (submitted) {
+  if (submitted || locked) {
     return (
       <div className="mx-auto flex min-h-[70vh] max-w-md flex-col items-center justify-center px-5 text-center">
         <CheckCircle2 className="h-16 w-16 text-primary" />
-        <h1 className="mt-4 text-2xl font-bold">Instrument {inst.id} submitted</h1>
+        <h1 className="mt-4 text-2xl font-bold">
+          {submitted ? `Instrument ${inst.id} submitted` : "Already submitted"}
+        </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Saved to the AHNi MEAL database (record #{submitted.id}).
+          {submitted
+            ? `Saved to the AHNi MEAL database (record #${submitted.id}).`
+            : `You have already submitted Instrument ${inst.id} from this device. Each instrument can be submitted once.`}
         </p>
-        <div className="mt-6 flex gap-3">
-          <Button onClick={() => setSubmitted(null)}>Fill another</Button>
-          <Button variant="outline" asChild><Link href="/meal">All instruments</Link></Button>
+        <div className="mt-6">
+          <Button variant="outline" asChild><Link href="/meal">Back to all instruments</Link></Button>
         </div>
       </div>
     );
@@ -172,7 +177,6 @@ export default function InstrumentForm({ inst }) {
         <p className="text-xs font-bold uppercase tracking-wider text-primary">Instrument {inst.id}</p>
         <h1 className="mt-1 text-2xl font-bold">{inst.title}</h1>
         {inst.respondents && <p className="mt-1 text-sm text-muted-foreground">Respondents: {inst.respondents}</p>}
-        {inst.time && <p className="text-sm text-muted-foreground">Target time: {inst.time}</p>}
         {inst.note && <p className="mt-3 rounded-md bg-accent p-3 text-sm text-accent-foreground">{inst.note}</p>}
       </div>
 
@@ -257,23 +261,33 @@ function QaBody({ inst, P, answers, setA }) {
               </p>
 
               {it.kind === "radio" && (
-                <div className="flex flex-wrap gap-2">
-                  {it.opts.map((o) => (
-                    <Pill key={o} active={answers[base] === o} onClick={() => setA(base, answers[base] === o ? "" : o)}>{o}</Pill>
-                  ))}
-                </div>
+                <>
+                  <div className="flex flex-wrap gap-2">
+                    {it.opts.map((o) => (
+                      <Pill key={o} active={answers[base] === o} onClick={() => setA(base, answers[base] === o ? "" : o)}>{o}</Pill>
+                    ))}
+                  </div>
+                  {answers[base] === "Other" && (
+                    <Input className="mt-2" placeholder="Please specify" value={answers[`${base}-other`] ?? ""} onChange={(e) => setA(`${base}-other`, e.target.value)} />
+                  )}
+                </>
               )}
 
               {it.kind === "multi" && (
-                <div className="flex flex-wrap gap-2">
-                  {it.opts.map((o) => {
-                    const set = new Set((answers[base] || "").split(",").filter(Boolean));
-                    const on = set.has(o);
-                    return (
-                      <Pill key={o} active={on} onClick={() => { on ? set.delete(o) : set.add(o); setA(base, [...set].join(",")); }}>{o}</Pill>
-                    );
-                  })}
-                </div>
+                <>
+                  <div className="flex flex-wrap gap-2">
+                    {it.opts.map((o) => {
+                      const set = new Set((answers[base] || "").split(",").filter(Boolean));
+                      const on = set.has(o);
+                      return (
+                        <Pill key={o} active={on} onClick={() => { on ? set.delete(o) : set.add(o); setA(base, [...set].join(",")); }}>{o}</Pill>
+                      );
+                    })}
+                  </div>
+                  {(answers[base] || "").split(",").includes("Other") && (
+                    <Input className="mt-2" placeholder="Please specify" value={answers[`${base}-other`] ?? ""} onChange={(e) => setA(`${base}-other`, e.target.value)} />
+                  )}
+                </>
               )}
 
               {it.kind === "text" && (

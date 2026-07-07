@@ -32,10 +32,12 @@ export default function AnnexForm({ which }) {
   const [missing, setMissing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(null);
+  const [locked, setLocked] = useState(false);
   const [toast, setToast] = useState("");
 
   useEffect(() => {
     try {
+      if (localStorage.getItem(`${STORE_KEY}_done`)) { setLocked(true); return; }
       const raw = localStorage.getItem(STORE_KEY);
       if (raw) {
         const p = JSON.parse(raw);
@@ -73,7 +75,7 @@ export default function AnnexForm({ which }) {
       if (res.ok && data.ok) {
         setSubmitted({ id: data.id });
         setMeta({}); setAnswers({}); setRows(isC ? 3 : 0);
-        try { localStorage.removeItem(STORE_KEY); } catch {}
+        try { localStorage.removeItem(STORE_KEY); localStorage.setItem(`${STORE_KEY}_done`, "1"); } catch {}
         window.scrollTo({ top: 0, behavior: "smooth" });
       } else showToast(`Submit failed: ${data.error || res.status}`);
     } catch {
@@ -83,15 +85,18 @@ export default function AnnexForm({ which }) {
     }
   };
 
-  if (submitted) {
+  if (submitted || locked) {
     return (
       <div className="mx-auto flex min-h-[70vh] max-w-md flex-col items-center justify-center px-5 text-center">
         <CheckCircle2 className="h-16 w-16 text-primary" />
-        <h1 className="mt-4 text-2xl font-bold">Submitted</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Saved to the AHNi MEAL database (record #{submitted.id}).</p>
-        <div className="mt-6 flex gap-3">
-          <Button onClick={() => setSubmitted(null)}>Fill another</Button>
-          <Button variant="outline" asChild><Link href="/meal">All instruments</Link></Button>
+        <h1 className="mt-4 text-2xl font-bold">{submitted ? "Submitted" : "Already submitted"}</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          {submitted
+            ? `Saved to the AHNi MEAL database (record #${submitted.id}).`
+            : "You have already submitted this from this device. It can be submitted once."}
+        </p>
+        <div className="mt-6">
+          <Button variant="outline" asChild><Link href="/meal">Back to all instruments</Link></Button>
         </div>
       </div>
     );
