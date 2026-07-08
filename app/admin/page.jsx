@@ -81,6 +81,9 @@ export default function AdminPage() {
     return [...new Set(list.map((r) => r.level || "Ungrouped"))].sort();
   }, [list, dataset]);
 
+  const latest = (g) => g.rows.reduce((m, r) => (new Date(r.created_at) > new Date(m) ? r.created_at : m), g.rows[0].created_at);
+  const idsOf = (g) => g.rows.map((r) => r.id);
+
   // Group into responses. HF: one row = one response. MEAL: group by batch
   // (fallback composite key for older rows submitted before batch ids).
   const responses = useMemo(() => {
@@ -91,12 +94,11 @@ export default function AdminPage() {
       if (!map.has(key)) map.set(key, { key, rows: [] });
       map.get(key).rows.push(r);
     }
-    return [...map.values()].sort((a, b) => new Date(latest(b)) - new Date(latest(a)));
+    const lt = (g) => g.rows.reduce((m, r) => (new Date(r.created_at) > new Date(m) ? r.created_at : m), g.rows[0].created_at);
+    return [...map.values()].sort((a, b) => new Date(lt(b)) - new Date(lt(a)));
   }, [visible, dataset]);
 
-  const latest = (g) => g.rows.reduce((m, r) => (new Date(r.created_at) > new Date(m) ? r.created_at : m), g.rows[0].created_at);
-  const idsOf = (g) => g.rows.map((r) => r.id);
-  const allVisibleIds = useMemo(() => responses.flatMap(idsOf), [responses]);
+  const allVisibleIds = useMemo(() => responses.flatMap((g) => g.rows.map((r) => r.id)), [responses]);
 
   const openGroup = async (g) => {
     setLoadingView(true); setViewing({ rep: g.rows[0], subs: null, g });

@@ -67,56 +67,76 @@ export async function GET(req) {
     wb.created = new Date();
 
     // Sheet 1: Submissions summary (all instruments)
-    const s1 = wb.addWorksheet("Submissions", { views: [{ state: "frozen", ySplit: 1 }] });
+    // ---- Group rows into responses (one wizard submission = one response) ----
+    const respKey = (r) => {
+      const m = r.meta || {};
+      return m.batch || `k|${m.level}|${m.state}|${m.lga}|${m.facility}|${m.assessor}`;
+    };
+    const respMap = new Map();
+    for (const r of rows) {
+      const k = respKey(r);
+      if (!respMap.has(k)) respMap.set(k, []);
+      respMap.get(k).push(r);
+    }
+    // order responses by earliest submission; assign R1, R2, … labels
+    const responses = [...respMap.entries()]
+      .map(([k, rs]) => ({ k, rs, first: Math.min(...rs.map((r) => new Date(r.created_at).getTime())) }))
+      .sort((a, b) => a.first - b.first);
+    const respLabel = new Map();
+    responses.forEach((g, i) => respLabel.set(g.k, `R${i + 1}`));
+
+    // Sheet 1: one row per RESPONSE
+    const s1 = wb.addWorksheet("Responses", { views: [{ state: "frozen", ySplit: 1 }] });
     s1.columns = [
-      { header: "ID", key: "id", width: 6 },
+      { header: "Response", key: "resp", width: 10 },
       { header: "Level", key: "level", width: 12 },
-      { header: "Instrument", key: "instrument", width: 12 },
       ...HEADER_COLS.map(([k, h]) => ({ header: h, key: k, width: 18 })),
-      { header: "Completion %", key: "completion", width: 12 },
+      { header: "Instruments", key: "instruments", width: 18 },
       { header: "Submitted at", key: "created_at", width: 22 },
     ];
-    for (const r of rows) {
-      const m = r.meta || {};
+    for (const g of responses) {
+      const m = g.rs[0].meta || {};
+      const latest = Math.max(...g.rs.map((r) => new Date(r.created_at).getTime()));
       s1.addRow({
-        id: Number(r.id), level: m.level ?? "Ungrouped", instrument: r.instrument,
+        resp: respLabel.get(g.k), level: m.level ?? "Ungrouped",
         ...Object.fromEntries(HEADER_COLS.map(([k]) => [k, m[k] ?? ""])),
-        completion: r.completion_pct != null ? Number(r.completion_pct) : "",
-        created_at: r.created_at ? new Date(r.created_at).toISOString().replace("T", " ").slice(0, 19) : "",
+        instruments: g.rs.map((r) => r.instrument).sort((a, b) => a - b).join(", "),
+        created_at: new Date(latest).toISOString().replace("T", " ").slice(0, 19),
       });
     }
     styleHeader(s1.getRow(1));
     s1.autoFilter = { from: "A1", to: { row: 1, column: s1.columnCount } };
 
-    // One answer sheet per LEVEL (States / LGA / Facilities), instrument as a column.
+    // Answer sheets per LEVEL, organised into contiguous response blocks (R1, R2…)
     const levelOrder = [...GROUPS.map((g) => g.level), "Ungrouped"];
     for (const level of levelOrder) {
-      const lvlRows = rows.filter((r) => (r.meta?.level ?? "Ungrouped") === level);
-      if (!lvlRows.length) continue;
+      const lvlResponses = responses.filter((g) => (g.rs[0].meta?.level ?? "Ungrouped") === level);
+      if (!lvlResponses.length) continue;
       const ws = wb.addWorksheet(level.slice(0, 31), { views: [{ state: "frozen", ySplit: 1 }] });
       ws.columns = [
-        { header: "Submission ID", key: "sid", width: 13 },
-        { header: "Instrument", key: "instrument", width: 11 },
-        { header: "State", key: "state", width: 13 },
-        { header: "LGA", key: "lga", width: 13 },
+        { header: "Response", key: "resp", width: 9 },
+        { header: "Assessor", key: "assessor", width: 16 },
         { header: "Facility", key: "facility", width: 16 },
-        { header: "Field ID", key: "field", width: 20 },
-        { header: "Question", key: "question", width: 52 },
-        { header: "Answer", key: "value", width: 42 },
+        { header: "Instrument", key: "instrument", width: 11 },
+        { header: "Field ID", key: "field", width: 18 },
+        { header: "Question", key: "question", width: 50 },
+        { header: "Answer", key: "value", width: 40 },
       ];
-      // group by instrument within the level for readability
-      lvlRows.sort((a, b) => String(a.instrument).localeCompare(String(b.instrument)) || Number(a.id) - Number(b.id));
-      for (const r of lvlRows) {
-        const m = r.meta || {};
-        const answers = r.answers || {};
-        Object.keys(answers).sort().forEach((k) => {
-          const v = answers[k];
-          ws.addRow({
-            sid: Number(r.id), instrument: r.instrument, state: m.state ?? "", lga: m.lga ?? "", facility: m.facility ?? "",
-            field: k, question: labelFor(r.instrument, k),
-            value: typeof v === "object" ? JSON.stringify(v) : String(v),
+      for (const g of lvlResponses) {
+        const label = respLabel.get(g.k);
+        const m0 = g.rs[0].meta || {};
+        const sorted = [...g.rs].sort((a, b) => a.instrument - b.instrument || Number(a.id) - Number(b.id));
+        for (const r of sorted) {
+          const answers = r.answers || {};
+          Object.keys(answers).sort().forEach((k) => {
+            const v = answers[k];
+            ws.addRow({
+              resp: label, assessor: m0.assessor ?? "", facility: m0.facility ?? "", instrument: r.instrument,
+              field: k, question: labelFor(r.instrument, k),
+              value: typeof v === "object" ? JSON.stringify(v) : String(v),
+            });
           });
-        });
+        }
       }
       styleHeader(ws.getRow(1));
       ws.getColumn("question").alignment = { wrapText: true, vertical: "top" };
