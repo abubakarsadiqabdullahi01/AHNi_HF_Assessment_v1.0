@@ -1,7 +1,7 @@
 import ExcelJS from "exceljs";
 import { getSql } from "../../../../lib/db";
 import { adminAuth } from "../../../../lib/adminAuth";
-import { INSTRUMENTS, EXTRAS, instrumentById, instrumentDictionary, ANNEX_C, ANNEX_D } from "../../../../lib/mealModel";
+import { INSTRUMENTS, EXTRAS, GROUPS, instrumentById, instrumentDictionary, ANNEX_C, ANNEX_D } from "../../../../lib/mealModel";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -70,6 +70,7 @@ export async function GET(req) {
     const s1 = wb.addWorksheet("Submissions", { views: [{ state: "frozen", ySplit: 1 }] });
     s1.columns = [
       { header: "ID", key: "id", width: 6 },
+      { header: "Level", key: "level", width: 12 },
       { header: "Instrument", key: "instrument", width: 12 },
       ...HEADER_COLS.map(([k, h]) => ({ header: h, key: k, width: 18 })),
       { header: "Completion %", key: "completion", width: 12 },
@@ -78,7 +79,7 @@ export async function GET(req) {
     for (const r of rows) {
       const m = r.meta || {};
       s1.addRow({
-        id: Number(r.id), instrument: r.instrument,
+        id: Number(r.id), level: m.level ?? "Ungrouped", instrument: r.instrument,
         ...Object.fromEntries(HEADER_COLS.map(([k]) => [k, m[k] ?? ""])),
         completion: r.completion_pct != null ? Number(r.completion_pct) : "",
         created_at: r.created_at ? new Date(r.created_at).toISOString().replace("T", " ").slice(0, 19) : "",
@@ -87,30 +88,32 @@ export async function GET(req) {
     styleHeader(s1.getRow(1));
     s1.autoFilter = { from: "A1", to: { row: 1, column: s1.columnCount } };
 
-    // One answer sheet per instrument that has data
-    const order = [...INSTRUMENTS.map((i) => i.id), ...EXTRAS.map((e) => e.id)];
-    for (const instId of order) {
-      const instRows = rows.filter((r) => r.instrument === instId);
-      if (!instRows.length) continue;
-      const sheetName = (instrumentById(instId) ? `Inst ${instId}` : instId).slice(0, 31);
-      const ws = wb.addWorksheet(sheetName, { views: [{ state: "frozen", ySplit: 1 }] });
+    // One answer sheet per LEVEL (States / LGA / Facilities), instrument as a column.
+    const levelOrder = [...GROUPS.map((g) => g.level), "Ungrouped"];
+    for (const level of levelOrder) {
+      const lvlRows = rows.filter((r) => (r.meta?.level ?? "Ungrouped") === level);
+      if (!lvlRows.length) continue;
+      const ws = wb.addWorksheet(level.slice(0, 31), { views: [{ state: "frozen", ySplit: 1 }] });
       ws.columns = [
         { header: "Submission ID", key: "sid", width: 13 },
-        { header: "State", key: "state", width: 14 },
-        { header: "LGA", key: "lga", width: 14 },
-        { header: "Facility", key: "facility", width: 18 },
-        { header: "Field ID", key: "field", width: 22 },
-        { header: "Question", key: "question", width: 55 },
-        { header: "Answer", key: "value", width: 45 },
+        { header: "Instrument", key: "instrument", width: 11 },
+        { header: "State", key: "state", width: 13 },
+        { header: "LGA", key: "lga", width: 13 },
+        { header: "Facility", key: "facility", width: 16 },
+        { header: "Field ID", key: "field", width: 20 },
+        { header: "Question", key: "question", width: 52 },
+        { header: "Answer", key: "value", width: 42 },
       ];
-      for (const r of instRows) {
+      // group by instrument within the level for readability
+      lvlRows.sort((a, b) => String(a.instrument).localeCompare(String(b.instrument)) || Number(a.id) - Number(b.id));
+      for (const r of lvlRows) {
         const m = r.meta || {};
         const answers = r.answers || {};
         Object.keys(answers).sort().forEach((k) => {
           const v = answers[k];
           ws.addRow({
-            sid: Number(r.id), state: m.state ?? "", lga: m.lga ?? "", facility: m.facility ?? "",
-            field: k, question: labelFor(instId, k),
+            sid: Number(r.id), instrument: r.instrument, state: m.state ?? "", lga: m.lga ?? "", facility: m.facility ?? "",
+            field: k, question: labelFor(r.instrument, k),
             value: typeof v === "object" ? JSON.stringify(v) : String(v),
           });
         });

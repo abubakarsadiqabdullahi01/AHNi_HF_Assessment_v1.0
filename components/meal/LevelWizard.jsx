@@ -74,7 +74,7 @@ export default function LevelWizard({ level }) {
         const P = `i${inst.id}`;
         const res = await fetch("/api/meal/submit", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ instrument: inst.id, meta, answers: deriveDqa(inst, P, byInst[inst.id] || {}), completion_pct: completion(inst) }),
+          body: JSON.stringify({ instrument: inst.id, meta: { ...meta, level: level.label }, answers: deriveDqa(inst, P, byInst[inst.id] || {}), completion_pct: completion(inst) }),
         });
         const data = await res.json().catch(() => ({}));
         if (res.ok && data.ok) { nextSucceeded[inst.id] = data.id; out.push({ id: inst.id, ok: true, recordId: data.id }); }

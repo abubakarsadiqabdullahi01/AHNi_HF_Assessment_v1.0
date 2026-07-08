@@ -20,8 +20,8 @@ const COLUMNS = {
     ["Assessment date", (r) => r.assessment_date], ["Complete", (r) => (r.completion_pct != null ? `${r.completion_pct}%` : "—")],
   ],
   meal: [
-    ["Instrument", (r) => r.instrument], ["State", (r) => r.state], ["LGA", (r) => r.lga],
-    ["Facility", (r) => r.facility], ["Tier", (r) => r.tier], ["Assessor", (r) => r.assessor],
+    ["Level", (r) => r.level], ["Instrument", (r) => r.instrument], ["State", (r) => r.state],
+    ["LGA", (r) => r.lga], ["Facility", (r) => r.facility], ["Tier", (r) => r.tier], ["Assessor", (r) => r.assessor],
   ],
 };
 
@@ -35,7 +35,7 @@ export default function AdminPage() {
   const [detail, setDetail] = useState(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [selected, setSelected] = useState(() => new Set());
-  const [mealFilter, setMealFilter] = useState(""); // instrument filter
+  const [mealFilter, setMealFilter] = useState(""); // level filter (States/LGA/Facilities)
 
   const load = useCallback(async (tok, ds) => {
     setErr("");
@@ -118,13 +118,13 @@ export default function AdminPage() {
 
   const visible = useMemo(() => {
     if (!list) return [];
-    if (dataset === "meal" && mealFilter) return list.filter((r) => String(r.instrument) === mealFilter);
+    if (dataset === "meal" && mealFilter) return list.filter((r) => (r.level || "Ungrouped") === mealFilter);
     return list;
   }, [list, dataset, mealFilter]);
 
-  const instrumentsInList = useMemo(() => {
+  const levelsInList = useMemo(() => {
     if (dataset !== "meal" || !list) return [];
-    return [...new Set(list.map((r) => String(r.instrument)))].sort();
+    return [...new Set(list.map((r) => r.level || "Ungrouped"))].sort();
   }, [list, dataset]);
 
   const toggleRow = (id) => setSelected((p) => { const n = new Set(p); const k = String(id); n.has(k) ? n.delete(k) : n.add(k); return n; });
@@ -178,10 +178,10 @@ export default function AdminPage() {
             {d.label}
           </button>
         ))}
-        {dataset === "meal" && instrumentsInList.length > 0 && (
+        {dataset === "meal" && levelsInList.length > 0 && (
           <select value={mealFilter} onChange={(e) => setMealFilter(e.target.value)} style={{ ...S.input, marginLeft: "auto", padding: "6px 10px" }}>
-            <option value="">All instruments</option>
-            {instrumentsInList.map((i) => <option key={i} value={i}>{/^\d+$/.test(i) ? `Instrument ${i}` : i}</option>)}
+            <option value="">All levels</option>
+            {levelsInList.map((l) => <option key={l} value={l}>{l}</option>)}
           </select>
         )}
       </div>
