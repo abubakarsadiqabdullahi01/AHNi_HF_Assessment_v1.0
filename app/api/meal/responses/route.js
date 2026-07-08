@@ -34,6 +34,7 @@ export async function GET(req) {
     const rows = await sql`
       SELECT id, instrument, state, lga, facility, tier,
              meta->>'level'     AS level,
+             meta->>'batch'     AS batch,
              meta->>'assessor'  AS assessor,
              assessment_date_text AS assessment_date,
              completion_pct, created_at

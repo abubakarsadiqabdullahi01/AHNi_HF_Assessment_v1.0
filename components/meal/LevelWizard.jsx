@@ -68,13 +68,17 @@ export default function LevelWizard({ level }) {
     setSubmitting(true);
     const out = [];
     const nextSucceeded = { ...succeeded };
+    // One batch id links all instruments submitted together as a single response.
+    const batch = (typeof crypto !== "undefined" && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : `b${Date.now()}${Math.round(Math.random() * 1e6)}`;
     for (const inst of insts) {
       if (nextSucceeded[inst.id]) { out.push({ id: inst.id, ok: true, recordId: nextSucceeded[inst.id] }); continue; }
       try {
         const P = `i${inst.id}`;
         const res = await fetch("/api/meal/submit", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ instrument: inst.id, meta: { ...meta, level: level.label }, answers: deriveDqa(inst, P, byInst[inst.id] || {}), completion_pct: completion(inst) }),
+          body: JSON.stringify({ instrument: inst.id, meta: { ...meta, level: level.label, batch }, answers: deriveDqa(inst, P, byInst[inst.id] || {}), completion_pct: completion(inst) }),
         });
         const data = await res.json().catch(() => ({}));
         if (res.ok && data.ok) { nextSucceeded[inst.id] = data.id; out.push({ id: inst.id, ok: true, recordId: data.id }); }

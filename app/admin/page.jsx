@@ -1,28 +1,31 @@
 "use client";
 
-// Admin response viewer — reachable only by navigating directly to /admin.
-// Not linked from either questionnaire. Read-only + delete + Excel export,
-// gated by ADMIN_TOKEN. Switches between the Health Financing and MEAL datasets.
+// Admin viewer — direct-URL, token-gated. Switches between Health Financing and
+// MEAL. MEAL rows submitted together (one wizard "Submit all") are grouped into
+// a single response; View opens a full-screen readable page (questions +
+// answers, no field ids).
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { META as HF_META, fieldDictionary } from "../../lib/formModel";
+import { HEADER as MEAL_HEADER, instrumentById, instrumentDictionary } from "../../lib/mealModel";
 
 const TOKEN_KEY = "ahni_admin_token";
+const HF_DICT = fieldDictionary();
 
 const DATASETS = {
   hf: { label: "Health Financing", list: "/api/responses", export: "/api/export" },
   meal: { label: "MEAL", list: "/api/meal/responses", export: "/api/meal/export" },
 };
 
-// Columns per dataset: [header, accessor(row)]
-const COLUMNS = {
-  hf: [
-    ["State", (r) => r.state], ["Assessor", (r) => r.assessor], ["Period", (r) => r.period],
-    ["Assessment date", (r) => r.assessment_date], ["Complete", (r) => (r.completion_pct != null ? `${r.completion_pct}%` : "—")],
-  ],
-  meal: [
-    ["Level", (r) => r.level], ["Instrument", (r) => r.instrument], ["State", (r) => r.state],
-    ["LGA", (r) => r.lga], ["Facility", (r) => r.facility], ["Tier", (r) => r.tier], ["Assessor", (r) => r.assessor],
-  ],
+const HF_META_LABEL = Object.fromEntries(HF_META.map((f) => [f.id, f.label]));
+const MEAL_META_LABEL = { ...Object.fromEntries(MEAL_HEADER.map((f) => [f.id, f.label])), level: "Level" };
+
+// dictionary of question labels for a submission's answers
+const answerRows = (dataset, sub) => {
+  const dict = dataset === "meal" ? instrumentDictionary(instrumentById(sub.instrument) || { id: sub.instrument, type: "" }) : HF_DICT;
+  return Object.entries(sub.answers || {})
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([k, v]) => ({ q: dict[k]?.question || k, a: typeof v === "object" ? JSON.stringify(v) : String(v) }));
 };
 
 export default function AdminPage() {
@@ -32,10 +35,10 @@ export default function AdminPage() {
   const [dataset, setDataset] = useState("hf");
   const [list, setList] = useState(null);
   const [err, setErr] = useState("");
-  const [detail, setDetail] = useState(null);
-  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [viewing, setViewing] = useState(null); // { rep, subs }
+  const [loadingView, setLoadingView] = useState(false);
   const [selected, setSelected] = useState(() => new Set());
-  const [mealFilter, setMealFilter] = useState(""); // level filter (States/LGA/Facilities)
+  const [mealFilter, setMealFilter] = useState("");
 
   const load = useCallback(async (tok, ds) => {
     setErr("");
@@ -44,12 +47,8 @@ export default function AdminPage() {
       if (res.status === 401) { setAuthed(false); setErr("Incorrect access token."); return false; }
       const data = await res.json();
       if (data.ok) { setList(data.submissions); setAuthed(true); return true; }
-      setErr(data.error || "Failed to load");
-      return false;
-    } catch {
-      setErr("Network error — is the server/database reachable?");
-      return false;
-    }
+      setErr(data.error || "Failed to load"); return false;
+    } catch { setErr("Network error — is the server/database reachable?"); return false; }
   }, []);
 
   useEffect(() => {
@@ -59,62 +58,17 @@ export default function AdminPage() {
 
   const switchDataset = (ds) => {
     if (ds === dataset) return;
-    setDataset(ds); setList(null); setDetail(null); setSelected(new Set()); setMealFilter("");
+    setDataset(ds); setList(null); setViewing(null); setSelected(new Set()); setMealFilter("");
     load(token, ds);
   };
 
   const signIn = async (e) => {
     e.preventDefault();
-    const t = tokenInput.trim();
-    if (!t) return;
+    const t = tokenInput.trim(); if (!t) return;
     const ok = await load(t, dataset);
     if (ok) { setToken(t); try { sessionStorage.setItem(TOKEN_KEY, t); } catch {} setTokenInput(""); }
   };
-
-  const signOut = () => {
-    try { sessionStorage.removeItem(TOKEN_KEY); } catch {}
-    setToken(""); setAuthed(false); setList(null); setDetail(null); setErr("");
-  };
-
-  const open = async (id) => {
-    setLoadingDetail(true); setDetail(null);
-    try {
-      const res = await fetch(`${DATASETS[dataset].list}?id=${id}`, { cache: "no-store", headers: { Authorization: `Bearer ${token}` } });
-      const data = await res.json();
-      if (data.ok) setDetail(data.submission); else setErr(data.error || "Failed to load submission");
-    } catch { setErr("Network error loading submission"); }
-    finally { setLoadingDetail(false); }
-  };
-
-  const remove = async (id) => {
-    if (!confirm(`Delete submission #${id}? This cannot be undone.`)) return;
-    setErr("");
-    try {
-      const res = await fetch(`${DATASETS[dataset].list}?id=${id}`, { method: "DELETE", cache: "no-store", headers: { Authorization: `Bearer ${token}` } });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok && data.ok) {
-        setList((prev) => (prev || []).filter((r) => String(r.id) !== String(id)));
-        setSelected((prev) => { const n = new Set(prev); n.delete(String(id)); return n; });
-        if (detail && String(detail.id) === String(id)) setDetail(null);
-      } else setErr(data.error || `Delete failed (${res.status})`);
-    } catch { setErr("Network error while deleting"); }
-  };
-
-  const exportXlsx = async (ids) => {
-    setErr("");
-    try {
-      const qs = ids && ids.length ? `?ids=${ids.join(",")}` : "";
-      const res = await fetch(`${DATASETS[dataset].export}${qs}`, { cache: "no-store", headers: { Authorization: `Bearer ${token}` } });
-      if (!res.ok) { const data = await res.json().catch(() => ({})); setErr(data.error || `Export failed (${res.status})`); return; }
-      const blob = await res.blob();
-      const cd = res.headers.get("Content-Disposition") || "";
-      const m = cd.match(/filename="?([^"]+)"?/);
-      const name = m ? m[1] : `AHNi-${dataset}-export.xlsx`;
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a"); a.href = url; a.download = name;
-      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-    } catch { setErr("Network error while exporting"); }
-  };
+  const signOut = () => { try { sessionStorage.removeItem(TOKEN_KEY); } catch {} setToken(""); setAuthed(false); setList(null); setViewing(null); setErr(""); };
 
   const visible = useMemo(() => {
     if (!list) return [];
@@ -127,16 +81,83 @@ export default function AdminPage() {
     return [...new Set(list.map((r) => r.level || "Ungrouped"))].sort();
   }, [list, dataset]);
 
-  const toggleRow = (id) => setSelected((p) => { const n = new Set(p); const k = String(id); n.has(k) ? n.delete(k) : n.add(k); return n; });
+  // Group into responses. HF: one row = one response. MEAL: group by batch
+  // (fallback composite key for older rows submitted before batch ids).
+  const responses = useMemo(() => {
+    if (dataset === "hf") return visible.map((r) => ({ key: `hf${r.id}`, rows: [r] }));
+    const map = new Map();
+    for (const r of visible) {
+      const key = r.batch || `k|${r.level}|${r.state}|${r.lga}|${r.facility}|${r.assessor}`;
+      if (!map.has(key)) map.set(key, { key, rows: [] });
+      map.get(key).rows.push(r);
+    }
+    return [...map.values()].sort((a, b) => new Date(latest(b)) - new Date(latest(a)));
+  }, [visible, dataset]);
+
+  const latest = (g) => g.rows.reduce((m, r) => (new Date(r.created_at) > new Date(m) ? r.created_at : m), g.rows[0].created_at);
+  const idsOf = (g) => g.rows.map((r) => r.id);
+  const allVisibleIds = useMemo(() => responses.flatMap(idsOf), [responses]);
+
+  const openGroup = async (g) => {
+    setLoadingView(true); setViewing({ rep: g.rows[0], subs: null, g });
+    try {
+      const subs = [];
+      for (const id of idsOf(g)) {
+        const res = await fetch(`${DATASETS[dataset].list}?id=${id}`, { cache: "no-store", headers: { Authorization: `Bearer ${token}` } });
+        const data = await res.json();
+        if (data.ok) subs.push(data.submission);
+      }
+      subs.sort((a, b) => String(a.instrument || "").localeCompare(String(b.instrument || "")));
+      setViewing({ rep: g.rows[0], subs, g });
+    } catch { setErr("Network error loading response"); setViewing(null); }
+    finally { setLoadingView(false); }
+  };
+
+  const removeGroup = async (g) => {
+    const ids = idsOf(g);
+    if (!confirm(`Delete this response (${ids.length} record${ids.length === 1 ? "" : "s"})? This cannot be undone.`)) return;
+    setErr("");
+    try {
+      for (const id of ids) {
+        await fetch(`${DATASETS[dataset].list}?id=${id}`, { method: "DELETE", cache: "no-store", headers: { Authorization: `Bearer ${token}` } });
+      }
+      setList((prev) => (prev || []).filter((r) => !ids.includes(r.id)));
+      setSelected((prev) => { const n = new Set(prev); ids.forEach((id) => n.delete(String(id))); return n; });
+      if (viewing) setViewing(null);
+    } catch { setErr("Network error while deleting"); }
+  };
+
+  const exportXlsx = async (ids) => {
+    setErr("");
+    try {
+      const qs = ids && ids.length ? `?ids=${ids.join(",")}` : "";
+      const res = await fetch(`${DATASETS[dataset].export}${qs}`, { cache: "no-store", headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) { const d = await res.json().catch(() => ({})); setErr(d.error || `Export failed (${res.status})`); return; }
+      const blob = await res.blob();
+      const cd = res.headers.get("Content-Disposition") || "";
+      const m = cd.match(/filename="?([^"]+)"?/);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = url; a.download = m ? m[1] : `AHNi-${dataset}.xlsx`;
+      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    } catch { setErr("Network error while exporting"); }
+  };
+
+  const toggleGroup = (g) => setSelected((p) => {
+    const ids = idsOf(g).map(String); const n = new Set(p);
+    const all = ids.every((id) => n.has(id));
+    ids.forEach((id) => (all ? n.delete(id) : n.add(id)));
+    return n;
+  });
   const toggleAll = () => setSelected((p) => {
-    const ids = visible.map((r) => String(r.id));
+    const ids = allVisibleIds.map(String);
     const all = ids.length > 0 && ids.every((id) => p.has(id));
     return all ? new Set() : new Set(ids);
   });
+  const groupSelected = (g) => idsOf(g).every((id) => selected.has(String(id)));
 
   const fmt = (t) => (t ? new Date(t).toLocaleString() : "—");
-  const cols = COLUMNS[dataset];
 
+  /* ---- login ---- */
   if (!authed) {
     return (
       <div style={S.page}>
@@ -154,13 +175,89 @@ export default function AdminPage() {
     );
   }
 
+  /* ---- full-screen response view ---- */
+  if (viewing) {
+    const { rep, subs, g } = viewing;
+    const meta = subs && subs[0] ? subs[0].meta : rep;
+    const metaLabel = dataset === "meal" ? MEAL_META_LABEL : HF_META_LABEL;
+    return (
+      <div style={S.page}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 16 }}>
+          <button style={S.btn} onClick={() => setViewing(null)}>← Back to list</button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button style={{ ...S.btn, ...S.primary }} onClick={() => exportXlsx(idsOf(g))}>Export this response</button>
+            <button style={{ ...S.btn, ...S.dangerBtn }} onClick={() => removeGroup(g)}>Delete</button>
+          </div>
+        </div>
+
+        <div style={S.eyebrow}>{dataset === "meal" ? `${rep.level || "Response"} assessment` : "Health Financing response"}</div>
+        <h1 style={S.h1}>
+          {dataset === "meal" ? `${rep.facility || "—"} · ${rep.lga || ""} ${rep.state || ""}` : `${rep.state || "—"} · ${rep.assessor || ""}`}
+        </h1>
+        <p style={S.muted}>Submitted {fmt(latest(g))}{dataset === "meal" ? ` · ${g.rows.length} instrument(s)` : ""}</p>
+
+        {/* site header / metadata */}
+        <div style={S.section}>
+          <h3 style={S.h3}>Site details</h3>
+          <div style={S.metaGrid}>
+            {Object.entries(meta || {}).filter(([k]) => k !== "batch").map(([k, v]) => (
+              <div key={k} style={S.metaItem}>
+                <span style={S.metaKey}>{metaLabel[k] || k}</span>
+                <span style={S.metaVal}>{String(v)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {loadingView && <p style={S.muted}>Loading full response…</p>}
+
+        {subs && subs.map((sub) => {
+          const rows = answerRows(dataset, sub);
+          const inst = dataset === "meal" ? instrumentById(sub.instrument) : null;
+          return (
+            <div key={sub.id} style={S.section}>
+              <h3 style={S.h3}>
+                {dataset === "meal" ? `Instrument ${sub.instrument}${inst ? " — " + inst.title : ""}` : "Responses"}
+                <span style={{ ...S.muted, fontWeight: 400, marginLeft: 8 }}>({rows.length} answered)</span>
+              </h3>
+              {rows.length === 0 ? (
+                <p style={S.muted}>No answers recorded.</p>
+              ) : (
+                <table style={S.qaTable}>
+                  <tbody>
+                    {rows.map((r, i) => (
+                      <tr key={i} style={S.tr}>
+                        <td style={S.qCell}>{r.q}</td>
+                        <td style={S.aCell}>{r.a}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  /* ---- list ---- */
+  const isMeal = dataset === "meal";
+  const headers = isMeal
+    ? ["Level", "State", "LGA", "Facility", "Assessor", "Instruments"]
+    : ["#", "State", "Assessor", "Period", "Assessment date", "Complete"];
+
+  const cells = (g) => {
+    const r = g.rows[0];
+    if (!isMeal) return [r.id, r.state, r.assessor, r.period, r.assessment_date, r.completion_pct != null ? `${r.completion_pct}%` : "—"];
+    const nums = g.rows.map((x) => x.instrument).sort((a, b) => a - b).join(", ");
+    return [r.level || "Ungrouped", r.state, r.lga, r.facility, r.assessor, `${g.rows.length} (${nums})`];
+  };
+
   return (
     <div style={S.page}>
       <div style={S.head}>
-        <div>
-          <div style={S.eyebrow}>AHNi · Assessments</div>
-          <h1 style={S.h1}>Submitted responses</h1>
-        </div>
+        <div><div style={S.eyebrow}>AHNi · Assessments</div><h1 style={S.h1}>Submitted responses</h1></div>
         <div style={{ display: "flex", gap: 8 }}>
           <button style={S.btn} onClick={() => load(token, dataset)}>Refresh</button>
           <button style={{ ...S.btn, ...S.primary }} onClick={() => exportXlsx(selected.size ? [...selected] : null)}>
@@ -170,15 +267,11 @@ export default function AdminPage() {
         </div>
       </div>
 
-      {/* dataset toggle */}
-      <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+      <div style={{ display: "flex", gap: 6, marginBottom: 14, alignItems: "center" }}>
         {Object.entries(DATASETS).map(([key, d]) => (
-          <button key={key} onClick={() => switchDataset(key)}
-            style={{ ...S.tab, ...(dataset === key ? S.tabActive : {}) }}>
-            {d.label}
-          </button>
+          <button key={key} onClick={() => switchDataset(key)} style={{ ...S.tab, ...(dataset === key ? S.tabActive : {}) }}>{d.label}</button>
         ))}
-        {dataset === "meal" && levelsInList.length > 0 && (
+        {isMeal && levelsInList.length > 0 && (
           <select value={mealFilter} onChange={(e) => setMealFilter(e.target.value)} style={{ ...S.input, marginLeft: "auto", padding: "6px 10px" }}>
             <option value="">All levels</option>
             {levelsInList.map((l) => <option key={l} value={l}>{l}</option>)}
@@ -188,80 +281,36 @@ export default function AdminPage() {
 
       {err && <div style={S.err}>{err}</div>}
       {!list && !err && <p style={S.muted}>Loading…</p>}
-      {list && <p style={S.muted}>{visible.length} submission{visible.length === 1 ? "" : "s"}</p>}
+      {list && <p style={S.muted}>{responses.length} response{responses.length === 1 ? "" : "s"}{isMeal ? ` · ${visible.length} records` : ""}</p>}
 
-      {list && visible.length > 0 && (
+      {list && responses.length > 0 && (
         <div style={S.tableWrap}>
           <table style={S.table}>
             <thead>
               <tr>
-                <th style={S.th}>
-                  <input type="checkbox" aria-label="Select all" checked={visible.length > 0 && visible.every((r) => selected.has(String(r.id)))} onChange={toggleAll} />
-                </th>
-                <th style={S.th}>#</th>
-                {cols.map(([h]) => <th key={h} style={S.th}>{h}</th>)}
+                <th style={S.th}><input type="checkbox" checked={allVisibleIds.length > 0 && allVisibleIds.every((id) => selected.has(String(id)))} onChange={toggleAll} /></th>
+                {headers.map((h) => <th key={h} style={S.th}>{h}</th>)}
                 <th style={S.th}>Submitted</th>
                 <th style={S.th}></th>
               </tr>
             </thead>
             <tbody>
-              {visible.map((r) => (
-                <tr key={r.id} style={S.tr}>
-                  <td style={S.td}><input type="checkbox" checked={selected.has(String(r.id))} onChange={() => toggleRow(r.id)} /></td>
-                  <td style={S.td}>{r.id}</td>
-                  {cols.map(([h, acc]) => <td key={h} style={S.td}>{acc(r) || "—"}</td>)}
-                  <td style={S.td}>{fmt(r.created_at)}</td>
+              {responses.map((g) => (
+                <tr key={g.key} style={S.tr}>
+                  <td style={S.td}><input type="checkbox" checked={groupSelected(g)} onChange={() => toggleGroup(g)} /></td>
+                  {cells(g).map((c, i) => <td key={i} style={S.td}>{c || "—"}</td>)}
+                  <td style={S.td}>{fmt(latest(g))}</td>
                   <td style={S.td}>
                     <div style={{ display: "flex", gap: 12 }}>
-                      <button style={S.link} onClick={() => open(r.id)}>View</button>
-                      <button style={S.link} onClick={() => exportXlsx([r.id])}>Export</button>
-                      <button style={{ ...S.link, ...S.danger }} onClick={() => remove(r.id)}>Delete</button>
+                      <button style={S.link} onClick={() => openGroup(g)}>View</button>
+                      <button style={S.link} onClick={() => exportXlsx(idsOf(g))}>Export</button>
+                      <button style={{ ...S.link, ...S.danger }} onClick={() => removeGroup(g)}>Delete</button>
                     </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
-      )}
-
-      {loadingDetail && <p style={S.muted}>Loading submission…</p>}
-
-      {detail && (
-        <div style={S.modalBg} onClick={() => setDetail(null)}>
-          <div style={S.modal} onClick={(e) => e.stopPropagation()}>
-            <div style={S.modalHead}>
-              <h2 style={S.h2}>Submission #{detail.id}{detail.instrument ? ` · Instrument ${detail.instrument}` : ""}</h2>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button style={{ ...S.btn, ...S.primary }} onClick={() => exportXlsx([detail.id])}>Export</button>
-                <button style={{ ...S.btn, ...S.dangerBtn }} onClick={() => remove(detail.id)}>Delete</button>
-                <button style={S.btn} onClick={() => setDetail(null)}>Close</button>
-              </div>
-            </div>
-
-            <h3 style={S.h3}>Metadata</h3>
-            <div style={S.kvGrid}>
-              {Object.entries(detail.meta || {}).map(([k, v]) => (
-                <div key={k} style={S.kvRow}><span style={S.kvKey}>{k}</span><span style={S.kvVal}>{String(v)}</span></div>
-              ))}
-              {(!detail.meta || Object.keys(detail.meta).length === 0) && <span style={S.muted}>No metadata</span>}
-            </div>
-
-            <h3 style={S.h3}>Answers ({Object.keys(detail.answers || {}).length} fields)</h3>
-            <div style={S.tableWrap}>
-              <table style={S.table}>
-                <thead><tr><th style={S.th}>Field ID</th><th style={S.th}>Value</th></tr></thead>
-                <tbody>
-                  {Object.entries(detail.answers || {}).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => (
-                    <tr key={k} style={S.tr}>
-                      <td style={{ ...S.td, fontFamily: "monospace", whiteSpace: "nowrap" }}>{k}</td>
-                      <td style={S.td}>{typeof v === "object" ? JSON.stringify(v) : String(v)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
         </div>
       )}
     </div>
@@ -274,8 +323,7 @@ const S = {
   head: { display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16, marginBottom: 18, borderBottom: "1px solid #e5e7eb", paddingBottom: 14 },
   eyebrow: { fontSize: 11, letterSpacing: ".08em", textTransform: "uppercase", color: RED, fontWeight: 700 },
   h1: { margin: "4px 0 0", fontSize: 24 },
-  h2: { margin: 0, fontSize: 18 },
-  h3: { margin: "18px 0 8px", fontSize: 14, color: "#374151" },
+  h3: { margin: "0 0 10px", fontSize: 15, color: "#111", fontWeight: 700 },
   muted: { color: "#6b7280", fontSize: 13 },
   err: { background: "#FEF2F2", border: "1px solid #FCA5A5", color: "#991B1B", padding: "10px 12px", borderRadius: 8, margin: "10px 0", fontSize: 13 },
   btn: { background: "#fff", border: "1px solid #d1d5db", borderRadius: 7, padding: "7px 14px", fontSize: 13, cursor: "pointer" },
@@ -291,11 +339,12 @@ const S = {
   th: { textAlign: "left", padding: "8px 10px", background: "#F7F8F9", borderBottom: "1px solid #e5e7eb", fontWeight: 700, whiteSpace: "nowrap" },
   tr: { borderBottom: "1px solid #f0f1f3" },
   td: { padding: "8px 10px", verticalAlign: "top" },
-  modalBg: { position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: 24, overflowY: "auto", zIndex: 50 },
-  modal: { background: "#fff", borderRadius: 12, padding: "20px 22px", maxWidth: 900, width: "100%", boxShadow: "0 20px 60px rgba(0,0,0,.3)" },
-  modalHead: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 },
-  kvGrid: { display: "flex", flexDirection: "column", gap: 4 },
-  kvRow: { display: "flex", gap: 10, fontSize: 13 },
-  kvKey: { minWidth: 130, color: "#6b7280", fontWeight: 600 },
-  kvVal: { flex: 1 },
+  section: { marginTop: 22, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, padding: "16px 18px" },
+  metaGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "8px 18px" },
+  metaItem: { display: "flex", flexDirection: "column" },
+  metaKey: { fontSize: 11, color: "#6b7280", textTransform: "uppercase", letterSpacing: ".04em", fontWeight: 600 },
+  metaVal: { fontSize: 14 },
+  qaTable: { borderCollapse: "collapse", width: "100%", fontSize: 13 },
+  qCell: { padding: "8px 10px", width: "55%", verticalAlign: "top", borderBottom: "1px solid #f0f1f3", color: "#374151" },
+  aCell: { padding: "8px 10px", verticalAlign: "top", borderBottom: "1px solid #f0f1f3", fontWeight: 600 },
 };
